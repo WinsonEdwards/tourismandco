@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Web App</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-cloud-sun"></i> Weather App</h1>
+            <p>Beautiful weather forecasts for anywhere in the world</p>
+        </header>
+
+        <div class="search-container">
+            <div class="search-box">
+                <input type="text" id="cityInput" placeholder="Enter city name...">
+                <button id="searchBtn"><i class="fas fa-search"></i></button>
+            </div>
+            <button id="locationBtn" class="location-btn">
+                <i class="fas fa-location-arrow"></i> Use My Location
+            </button>
+        </div>
+
+        <div class="weather-container" id="weatherContainer">
+            <!-- Weather content will be loaded here -->
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading weather data...</p>
+        </div>
+
+        <div class="error" id="error">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p id="errorMessage"></p>
+            <button id="retryBtn">Try Again</button>
+        </div>
+
+        <div class="api-setup" id="apiSetup">
+            <div class="api-setup-content">
+                <h2><i class="fas fa-key"></i> API Key Required</h2>
+                <p>To use this weather app, you need a free API key from OpenWeatherMap:</p>
+                <ol>
+                    <li>Go to <a href="https://openweathermap.org/api" target="_blank">OpenWeatherMap</a></li>
+                    <li>Sign up for a free account</li>
+                    <li>Get your API key</li>
+                    <li>Enter it below:</li>
+                </ol>
+                <div class="api-input">
+                    <input type="text" id="apiKeyInput" placeholder="Enter your API key here...">
+                    <button id="saveApiBtn">Save API Key</button>
+                </div>
+                <p class="api-note">Your API key will be stored locally in your browser.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2024 Weather App. Data provided by <a href="https://openweathermap.org" target="_blank">OpenWeatherMap</a></p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

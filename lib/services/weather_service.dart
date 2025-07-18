@@ -6,7 +6,14 @@ import '../models/weather.dart';
 
 class WeatherService {
   static const String _baseUrl = 'https://api.openweathermap.org/data/2.5';
-  static const String _apiKey = 'your_api_key_here'; // Replace with your OpenWeatherMap API key
+  
+  // IMPORTANT: Replace with your actual OpenWeatherMap API key
+  // Get your free API key at: https://openweathermap.org/api
+  // 1. Sign up at https://home.openweathermap.org/users/sign_up
+  // 2. Verify your email
+  // 3. Go to https://home.openweathermap.org/api_keys
+  // 4. Copy your API key and replace the placeholder below
+  static const String _apiKey = 'your_api_key_here'; // Replace with your actual API key
   
   // Get current location
   Future<Position> getCurrentLocation() async {
@@ -48,33 +55,53 @@ class WeatherService {
 
   // Get weather data for coordinates
   Future<Weather> getWeatherByCoordinates(double latitude, double longitude) async {
+    // Check if API key is set
+    if (_apiKey == 'your_api_key_here') {
+      throw Exception(
+        'API key not configured. Please:\n'
+        '1. Get a free API key at https://openweathermap.org/api\n'
+        '2. Replace "your_api_key_here" in lib/services/weather_service.dart\n'
+        '3. Restart the app'
+      );
+    }
+
     try {
-      final cityName = await getCityName(latitude, longitude);
-      
       // Get current weather
-      final currentWeatherUrl = '$_baseUrl/weather?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric';
-      final currentResponse = await http.get(Uri.parse(currentWeatherUrl));
-      
+      final currentResponse = await http.get(
+        Uri.parse('$_baseUrl/weather?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric'),
+      );
+
       if (currentResponse.statusCode != 200) {
-        throw Exception('Failed to load current weather data');
+        throw Exception('Failed to load current weather: ${currentResponse.statusCode}');
       }
-      
+
       final currentData = json.decode(currentResponse.body);
-      
+
       // Get forecast data
-      final forecastUrl = '$_baseUrl/forecast?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric';
-      final forecastResponse = await http.get(Uri.parse(forecastUrl));
-      
+      final forecastResponse = await http.get(
+        Uri.parse('$_baseUrl/forecast?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric'),
+      );
+
       if (forecastResponse.statusCode != 200) {
-        throw Exception('Failed to load forecast data');
+        throw Exception('Failed to load forecast: ${forecastResponse.statusCode}');
       }
-      
+
       final forecastData = json.decode(forecastResponse.body);
+
+      // Get city name
+      final cityName = await getCityName(latitude, longitude);
+
+      // Parse current weather
+      final main = currentData['main'];
+      final weather = currentData['weather'][0];
+      final wind = currentData['wind'];
+
+      // Parse hourly forecast (from 5-day forecast with 3-hour intervals)
+      final List<HourlyForecast> hourlyForecast = [];
+      final forecastList = forecastData['list'] as List;
       
-      // Parse hourly forecast (next 24 hours)
-      final hourlyForecast = <HourlyForecast>[];
-      for (int i = 0; i < 8 && i < forecastData['list'].length; i++) {
-        final item = forecastData['list'][i];
+      for (int i = 0; i < (forecastList.length < 8 ? forecastList.length : 8); i++) {
+        final item = forecastList[i];
         hourlyForecast.add(HourlyForecast(
           time: DateTime.fromMillisecondsSinceEpoch(item['dt'] * 1000),
           temperature: item['main']['temp'].toDouble(),
@@ -83,108 +110,77 @@ class WeatherService {
           windSpeed: item['wind']['speed'].toDouble(),
         ));
       }
+
+      // Parse daily forecast (group by day)
+      final List<DailyForecast> dailyForecast = [];
+      final Map<String, List<dynamic>> groupedByDay = {};
       
-      // Parse daily forecast (next 5 days)
-      final dailyForecast = <DailyForecast>[];
-      final Map<String, List<dynamic>> dailyData = {};
-      
-      for (final item in forecastData['list']) {
+      for (final item in forecastList) {
         final date = DateTime.fromMillisecondsSinceEpoch(item['dt'] * 1000);
-        final dateKey = '${date.year}-${date.month}-${date.day}';
+        final dayKey = '${date.year}-${date.month}-${date.day}';
         
-        if (!dailyData.containsKey(dateKey)) {
-          dailyData[dateKey] = [];
+        if (!groupedByDay.containsKey(dayKey)) {
+          groupedByDay[dayKey] = [];
         }
-        dailyData[dateKey]!.add(item);
+        groupedByDay[dayKey]!.add(item);
       }
-      
-      dailyData.forEach((dateKey, items) {
-        if (dailyForecast.length < 5) {
-          final temps = items.map((item) => item['main']['temp'].toDouble()).toList();
-          final maxTemp = temps.reduce((a, b) => a > b ? a : b);
-          final minTemp = temps.reduce((a, b) => a < b ? a : b);
-          
-          // Use the middle item for other data
-          final middleItem = items[items.length ~/ 2];
-          
-          dailyForecast.add(DailyForecast(
-            date: DateTime.fromMillisecondsSinceEpoch(middleItem['dt'] * 1000),
-            maxTemp: maxTemp,
-            minTemp: minTemp,
-            description: middleItem['weather'][0]['description'],
-            icon: middleItem['weather'][0]['icon'],
-            humidity: middleItem['main']['humidity'],
-            windSpeed: middleItem['wind']['speed'].toDouble(),
-          ));
+
+      for (final entry in groupedByDay.entries) {
+        if (dailyForecast.length >= 5) break; // Limit to 5 days
+        
+        final dayData = entry.value;
+        final firstItem = dayData[0];
+        
+        // Calculate min/max temperatures for the day
+        double minTemp = dayData[0]['main']['temp'].toDouble();
+        double maxTemp = dayData[0]['main']['temp'].toDouble();
+        
+        for (final item in dayData) {
+          final temp = item['main']['temp'].toDouble();
+          if (temp < minTemp) minTemp = temp;
+          if (temp > maxTemp) maxTemp = temp;
         }
-      });
-      
+
+        dailyForecast.add(DailyForecast(
+          date: DateTime.fromMillisecondsSinceEpoch(firstItem['dt'] * 1000),
+          minTemperature: minTemp,
+          maxTemperature: maxTemp,
+          icon: firstItem['weather'][0]['icon'],
+          description: firstItem['weather'][0]['description'],
+        ));
+      }
+
       return Weather(
         cityName: cityName,
-        temperature: currentData['main']['temp'].toDouble(),
-        description: currentData['weather'][0]['description'],
-        icon: currentData['weather'][0]['icon'],
-        feelsLike: currentData['main']['feels_like'].toDouble(),
-        humidity: currentData['main']['humidity'],
-        windSpeed: currentData['wind']['speed'].toDouble(),
-        pressure: currentData['main']['pressure'],
-        visibility: currentData['visibility'].toDouble() / 1000, // Convert to km
-        uvIndex: 0, // UV index not available in free tier
+        temperature: main['temp'].toDouble(),
+        description: weather['description'],
+        icon: weather['icon'],
+        feelsLike: main['feels_like'].toDouble(),
+        humidity: main['humidity'],
+        windSpeed: wind['speed'].toDouble(),
+        pressure: main['pressure'],
+        visibility: (currentData['visibility'] / 1000).toDouble(), // Convert to km
+        uvIndex: 0, // UV index not available in free plan
         hourlyForecast: hourlyForecast,
         dailyForecast: dailyForecast,
       );
     } catch (e) {
-      print('Error fetching weather data: $e');
-      throw Exception('Failed to fetch weather data: $e');
+      throw Exception('Error fetching weather data: $e');
     }
   }
 
-  // Get weather data for a city name
+  // Get weather data by city name
   Future<Weather> getWeatherByCity(String cityName) async {
     try {
-      final geocodingUrl = 'http://api.openweathermap.org/geo/1.0/direct?q=$cityName&limit=1&appid=$_apiKey';
-      final geocodingResponse = await http.get(Uri.parse(geocodingUrl));
-      
-      if (geocodingResponse.statusCode != 200) {
-        throw Exception('Failed to get city coordinates');
-      }
-      
-      final geocodingData = json.decode(geocodingResponse.body);
-      if (geocodingData.isEmpty) {
+      List<Location> locations = await locationFromAddress(cityName);
+      if (locations.isNotEmpty) {
+        final location = locations[0];
+        return await getWeatherByCoordinates(location.latitude, location.longitude);
+      } else {
         throw Exception('City not found');
       }
-      
-      final latitude = geocodingData[0]['lat'].toDouble();
-      final longitude = geocodingData[0]['lon'].toDouble();
-      
-      return await getWeatherByCoordinates(latitude, longitude);
     } catch (e) {
-      print('Error fetching weather by city: $e');
-      throw Exception('Failed to fetch weather data: $e');
-    }
-  }
-
-  // Search for cities
-  Future<List<Location>> searchCities(String query) async {
-    try {
-      final geocodingUrl = 'http://api.openweathermap.org/geo/1.0/direct?q=$query&limit=5&appid=$_apiKey';
-      final response = await http.get(Uri.parse(geocodingUrl));
-      
-      if (response.statusCode != 200) {
-        throw Exception('Failed to search cities');
-      }
-      
-      final data = json.decode(response.body);
-      return data.map<Location>((item) => Location(
-        name: item['name'],
-        latitude: item['lat'].toDouble(),
-        longitude: item['lon'].toDouble(),
-        country: item['country'],
-        state: item['state'],
-      )).toList();
-    } catch (e) {
-      print('Error searching cities: $e');
-      return [];
+      throw Exception('Error fetching weather for city: $e');
     }
   }
 }
